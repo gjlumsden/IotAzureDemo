@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.26730.16
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IotAzureDemo.Functions", "IotAzureDemo.Functions\IotAzureDemo.Functions.csproj", "{971E5E61-D2B8-428F-A5E9-26A259407B67}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IotAzureDemo.Model", "IotAzureDemo.Model\IotAzureDemo.Model.csproj", "{1BB88D31-F236-4ABA-910C-84C57EE3CDAB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{971E5E61-D2B8-428F-A5E9-26A259407B67}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{971E5E61-D2B8-428F-A5E9-26A259407B67}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{971E5E61-D2B8-428F-A5E9-26A259407B67}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{971E5E61-D2B8-428F-A5E9-26A259407B67}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1BB88D31-F236-4ABA-910C-84C57EE3CDAB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1BB88D31-F236-4ABA-910C-84C57EE3CDAB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1BB88D31-F236-4ABA-910C-84C57EE3CDAB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1BB88D31-F236-4ABA-910C-84C57EE3CDAB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C6D58DCB-0F51-47BD-861A-9FAD9AF03731}
+	EndGlobalSection
+EndGlobal

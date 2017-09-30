@@ -1,0 +1,562 @@
+{
+  "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "appName": {
+      "type": "string",
+      "maxLength": 7,
+      "metadata": {
+        "description": "The App Name to base resource names upon."
+      }
+    },
+    "storageSKU": {
+      "type": "string",
+      "allowedValues": [
+        "Standard_LRS",
+        "Standard_GRS",
+        "Standard_RAGRS",
+        "Premium_LRS"
+      ],
+      "defaultValue": "Standard_LRS",
+      "metadata": {
+        "description": "The storage SKU to use for storage accounts. Applies to all storage accounts in the deployment"
+      }
+    },
+    "iotHubSKU": {
+      "type": "string",
+      "allowedValues": [
+        "F1",
+        "S1",
+        "S2",
+        "S3"
+      ],
+      "defaultValue": "F1",
+      "metadata": {
+        "description": "The SKU for the IoT Hub."
+      }
+    },
+    "FUNCTIONS_EXTENSION_VERSION": {
+      "type": "string",
+      "metadata": {
+        "description": "The version of the Function App runtime to use"
+      },
+      "defaultValue": "~1",
+      "allowedValues": [
+        "latest",
+        "~1",
+        "beta"
+      ]
+    },
+    "SendgridKey": {
+      "type": "string"
+    },
+    "emailRecipients": {
+      "type": "string",
+      "minLength": 6
+    },
+    "alertSenderName":{
+      "type": "string"
+    },
+    "alertSenderAddress":{
+      "type": "string"
+    }
+  },
+  "variables": {
+    "functionAppStorageName": "[tolower(concat(parameters('appName'),'func', uniqueString(resourceGroup().id)))]",
+    "archiveStorageName": "[tolower(concat(parameters('appName'),'arch', uniqueString(resourceGroup().id)))]",
+    "eventAlertStorageName": "[tolower(concat(parameters('appName'),'qstr', uniqueString(resourceGroup().id)))]",
+    "iotHubName": "[concat(parameters('appName'),'-IoT-Hub-', uniqueString(resourceGroup().id))]",
+    "functionAppName": "[concat(parameters('appName'),'-Functions-', uniqueString(resourceGroup().id))]",
+    "hostingPlanName": "[concat(parameters('appName'),'-Plan-', uniqueString(resourceGroup().id))]",
+    "appInsightsName": "[concat(parameters('appName'),'-Functions-AI-', uniqueString(resourceGroup().id))]",
+    "eventHubNamespace": "[concat(parameters('appName'),'-Event-Hub-', uniqueString(resourceGroup().id))]",
+    "asaJobName": "[concat(parameters('appName'), '-asa-job-', uniqueString(resourceGroup().id))]",
+    "cosmosAccountName": "[concat(tolower(parameters('appName')), '-cosmosdb-', uniqueString(resourceGroup().id))]",
+    "eventHubName": "telemetry",
+    "sensorEventFuncSASKeyName": "sensorEventFuncKey",
+    "asaEventSendSASKey": "asaJobEventSendKey",
+    "sensorEventFuncConsumerGroup": "sensorEventFunctionCg",
+    "iotHubAsaRawOutputConsumerGroup": "asaRawOutputCG",
+    "iotHubAsaAggregateOutputConsumerGroup": "asaAggOutputCG",
+    "IotHubAsaKeyName": "asaJobKey",
+    "IotHubFunctionServiceConnectKeyName": "funcServiceKey",
+    "rawDataContainerName": "rawdataarchive",
+    "asaJobTransformQuery": "WITH NowAndPrevious AS\r\n(\r\n    SELECT  TemperatureM0 = Temperature,\r\n            TemperatureM1 = LAG(Temperature, 1) OVER (PARTITION BY IotHub.ConnectionDeviceId LIMIT DURATION(ss, 5) WHEN Temperature IS NOT NULL),\r\n            TemperatureM2 = LAG(Temperature, 2) OVER (PARTITION BY IotHub.ConnectionDeviceId LIMIT DURATION(ss, 5) WHEN Temperature IS NOT NULL),\r\n            HumidityM0 = Humidity,\r\n            HumidityM1 = LAG(Humidity, 1) OVER (PARTITION BY IotHub.ConnectionDeviceId LIMIT DURATION(ss, 5) WHEN Humidity IS NOT NULL),\r\n            HumidityM2 = LAG(Humidity, 2) OVER (PARTITION BY IotHub.ConnectionDeviceId LIMIT DURATION(ss, 5) WHEN Humidity IS NOT NULL),\r\n            VibrationM0 = Vibration,\r\n            VibrationM1 = LAG(Vibration, 1) OVER (PARTITION BY IotHub.ConnectionDeviceId LIMIT DURATION(ss, 5) WHEN Vibration IS NOT NULL),\r\n            VibrationM2 = LAG(Vibration,2) OVER (PARTITION BY IotHub.ConnectionDeviceId LIMIT DURATION(ss, 5) WHEN Vibration IS NOT NULL),\r\n            DeviceId = IotHub.ConnectionDeviceId,\r\n            Name,\r\n\t\t\tEquipmentStatus,\r\n            TimeM0 = Time,\r\n            TimeM1 = LAG(Time, 1) OVER (PARTITION BY IotHub.ConnectionDeviceId LIMIT DURATION(ss, 5)),\r\n            TimeM2 = LAG(Time, 2) OVER (PARTITION BY IotHub.ConnectionDeviceId LIMIT DURATION(ss, 5))\r\n    FROM    IotHubInput TIMESTAMP BY Time\r\n    \r\n),\r\nHumidEvents AS\r\n(\r\n    SELECT      EventType = 'Humidity',\r\n                HumidityM0 AS CurrentValue,\r\n                HumidityM2 AS BeforeThreshold,\r\n                TimeM0 AS EventTime,\r\n                TimeM2 AS BeforeThresholdTime,\r\n                Duration = DATEDIFF(ss, TimeM2, TimeM0),\r\n                Name,\r\n                DeviceId,\r\n\t\t\t\tEquipmentStatus,\r\n                (CASE WHEN HumidityM0 > 65 THEN 'CRITICAL' ELSE (CASE WHEN HumidityM1 > 60 THEN 'WARN' ELSE 'HEALTHY' END) END) AS Severity\r\n    FROM        NowAndPrevious \r\n    WHERE       (HumidityM0 > 65 AND HumidityM1 > 65 AND HumidityM2 <65) OR \r\n                (HumidityM0 > 60 AND HumidityM1 > 60 AND HumidityM2 <60) OR \r\n                (HumidityM0 < 60 AND HumidityM1 < 60 AND HumidityM2 >60)\r\n),\r\nTemperatureEvents AS\r\n(\r\n    SELECT      EventType = 'Temperature',\r\n                TemperatureM0 AS CurrentValue,\r\n                TemperatureM2 AS BeforeThreshold,\r\n                TimeM0 AS EventTime,\r\n                TimeM2 AS BeforeThresholdTime,\r\n                Duration = DATEDIFF(ss, TimeM2, TimeM0),\r\n                Name,\r\n                DeviceId,\r\n\t\t\t\tEquipmentStatus,\r\n                (CASE WHEN TemperatureM0 > 45 THEN 'CRITICAL' ELSE (CASE WHEN TemperatureM0 > 30 THEN 'WARN' ELSE 'HEALTHY' END) END) AS Severity\r\n    FROM        NowAndPrevious \r\n    WHERE       (TemperatureM0 > 30 AND TemperatureM1 > 30 AND TemperatureM2 <30) OR \r\n                (TemperatureM0 > 45 AND TemperatureM1 > 45 AND TemperatureM2 < 45) OR \r\n                (TemperatureM0 < 30 AND TemperatureM1 < 30 AND TemperatureM2 >30)\r\n),\r\nVibrationEvents AS\r\n(\r\n    SELECT      EventType = 'Vibration',\r\n                VibrationM0 AS CurrentValue,\r\n                VibrationM2 AS BeforeThreshold,\r\n                TimeM0 AS EventTime,\r\n                TimeM2 AS BeforeThresholdTime,\r\n                Duration = DATEDIFF(ss, TimeM2, TimeM0),\r\n                Name,\r\n                DeviceId,\r\n\t\t\t\tEquipmentStatus,\r\n                (CASE WHEN VibrationM0 > 2 THEN 'CRITICAL' ELSE (CASE WHEN VibrationM0 > 1 THEN 'WARN' ELSE 'HEALTHY' END) END) AS Severity\r\n    FROM        NowAndPrevious \r\n    WHERE       (VibrationM0 > 1 AND VibrationM1 > 1 AND VibrationM2 < 1) OR \r\n                (VibrationM0 > 2 AND VibrationM1 > 2 AND VibrationM2 < 2) OR \r\n                (VibrationM0 < 1 AND VibrationM1 < 1 AND VibrationM2 > 1)\r\n),\r\nAllEvents AS\r\n(\r\n    SELECT * FROM HumidEvents UNION SELECT * FROM TemperatureEvents UNION SELECT * FROM VibrationEvents\r\n)\r\n\r\nSELECT * INTO EventHubOutput FROM AllEvents\r\nSELECT * INTO BlobSink FROM IotHubInput TIMESTAMP BY Time\r\n--SELECT * INTO PbiDataset FROM IotHubInput TIMESTAMP BY Time"
+  },
+  "resources": [
+    {
+      "name": "[variables('functionAppStorageName')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2017-06-01",
+      "sku": {
+        "name": "[parameters('storageSku')]"
+      },
+      "kind": "Storage",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "DisplayName": "Functions Storage"
+      },
+      "properties": {
+        "encryption": {
+          "services": {
+            "blob": {
+              "enabled": true
+            }
+          },
+          "keySource": "Microsoft.Storage"
+        }
+      }
+    },
+    {
+      "name": "[variables('eventAlertStorageName')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2017-06-01",
+      "sku": {
+        "name": "[parameters('storageSku')]"
+      },
+      "kind": "Storage",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "DisplayName": "Alert Storage Queues"
+      },
+      "properties": {}
+    },
+    {
+      "name": "[variables('archiveStorageName')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2017-06-01",
+      "sku": {
+        "name": "[parameters('storageSku')]"
+      },
+      "kind": "BlobStorage",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "DisplayName": "Archive Storage"
+      },
+      "properties": {
+        "encryption": {
+          "services": {
+            "blob": {
+              "enabled": true
+            }
+          },
+          "keySource": "Microsoft.Storage"
+        },
+        "accessTier": "Hot"
+      }
+    },
+    {
+      "name": "[variables('iotHubName')]",
+      "type": "Microsoft.Devices/IotHubs",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "DisplayName":"Ingestion IoT Hub"
+      },
+      "properties": {
+        "location": "[resourceGroup().location]",
+        "authorizationPolicies": [
+          {
+            "keyName": "[variables('IotHubAsaKeyName')]",
+            "rights": "ServiceConnect"
+          },
+          {
+            "keyName": "iotHubOwner",
+            "rights": "RegistryRead, RegistryWrite, ServiceConnect, DeviceConnect"
+          },
+          {
+            "keyName": "[variables('IotHubFunctionServiceConnectKeyName')]",
+            "rights": "RegistryRead, RegistryWrite, ServiceConnect"
+          },
+          {
+            "keyName": "deviceConnect",
+            "rights": "DeviceConnect"
+          }
+        ],
+        "features": "DeviceManagement"
+      },
+      "apiVersion": "2016-02-03",
+      "sku": {
+        "name": "[parameters('iotHubSKU')]",
+        "capacity": 1
+      },
+      "resources": [
+        {
+          "name": "[concat(variables('iotHubName'), '/events/', variables('iotHubAsaRawOutputConsumerGroup'))]",
+          "type": "Microsoft.Devices/IotHubs/eventHubEndpoints/ConsumerGroups",
+          "apiVersion": "2016-02-03",
+          "dependsOn": [
+            "[concat('Microsoft.Devices/Iothubs/', variables('iotHubName'))]"
+          ]
+        },
+        {
+          "name": "[concat(variables('iotHubName'), '/events/', variables('iotHubAsaAggregateOutputConsumerGroup'))]",
+          "apiVersion": "2016-02-03",
+          "type": "Microsoft.Devices/IotHubs/eventHubEndpoints/ConsumerGroups",
+          "dependsOn": [
+            "[concat('Microsoft.Devices/Iothubs/', variables('iotHubName'))]"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "name": "[variables('hostingPlanName')]",
+      "apiVersion": "2016-09-01",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "DisplayName": "Consumption Hosting Plan"
+      },
+      "sku": {
+        "name": "Y1",
+        "tier": "Dynamic",
+        "size": "Y1",
+        "family": "Y",
+        "capacity": 0
+      },
+      "properties": {
+        "name": "[variables('hostingPlanName')]"
+      },
+      "dependsOn": []
+    },
+    {
+      "apiVersion": "2016-08-01",
+      "type": "Microsoft.Web/sites",
+      "name": "[variables('functionAppName')]",
+      "location": "[resourceGroup().location]",
+      "kind": "functionapp",
+      "tags": {
+        "DisplayName":"[concat(parameters('appName'), ' Function App')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('functionAppStorageName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('eventAlertStorageName'))]",
+        "[resourceId('Microsoft.EventHub/namespaces/eventhubs/authorizationRules', variables('eventHubNamespace'), variables('eventHubName'), variables('sensorEventFuncSASKeyName'))]",
+        "[resourceId('Microsoft.Devices/IotHubs', variables('iotHubName'))]",
+        "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]",
+        "[resourceId('Microsoft.DocumentDb/databaseAccounts',variables('cosmosAccountName'))]"
+      ],
+      "properties": {
+        "name": "[variables('functionAppName')]",
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
+        "clientAffinityEnabled": false,
+        "siteConfig": {
+          "appsettings": [
+            {
+              "name": "AzureWebJobsDashboard",
+              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('functionAppStorageName'),';AccountKey=',listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('functionAppStorageName')), '2015-05-01-preview').key1)]"
+            },
+            {
+              "name": "AzureWebJobsStorage",
+              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('functionAppStorageName'),';AccountKey=',listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('functionAppStorageName')), '2015-05-01-preview').key1)]"
+            },
+            {
+              "name": "FUNCTIONS_EXTENSION_VERSION",
+              "value": "[parameters('FUNCTIONS_EXTENSION_VERSION')]"
+            },
+            {
+              "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
+              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('functionAppStorageName'),';AccountKey=',listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('functionAppStorageName')), '2015-05-01-preview').key1)]"
+            },
+            {
+              "name": "WEBSITE_CONTENTSHARE",
+              "value": "[concat(toLower(variables('functionAppName')), '-prod')]"
+            },
+            {
+              "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+              "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2014-04-01').InstrumentationKey]"
+            },
+            {
+              "name": "sensorEventConnectionString",
+              "value": "[listkeys(variables('sensorEventFuncSASKeyName'), '2015-08-01').primaryConnectionString]"
+            },
+            {
+              "name": "alertStorageQueueConnection",
+              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('eventAlertStorageName'),';AccountKey=',listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('eventAlertStorageName')), '2015-05-01-preview').key1)]"
+            },
+            {
+              "name": "sendgridKey",
+              "value": "[parameters('SendgridKey')]"
+            },
+            {
+              "name": "DeviceManagementConnection",
+              "value": "[concat('HostName=',variables('iotHubName'),'.azure-devices.net;SharedAccessKeyName=',variables('IotHubFunctionServiceConnectKeyName'),';SharedAccessKey=',listKeys(resourceId('Microsoft.Devices/IotHubs/Iothubkeys', variables('iotHubName'), variables('IotHubFunctionServiceConnectKeyName')), '2016-02-03').primaryKey)]"
+            },
+            {
+              "name": "AzureWebJobsSecretStorageType",
+              "value": "Blob"
+            },
+            {
+              "name": "eventsConsumerGroup",
+              "value": "[variables('sensorEventFuncConsumerGroup')]"
+            },
+            {
+              "name": "alertsQueueName",
+              "value": "eventalerts"
+            },
+            {
+              "name": "alertSenderName",
+              "value": "[parameters('alertSenderName')]"
+            },
+            {
+              "name": "alertSenderAddress",
+              "value": "[parameters('alertSenderAddress')]"
+            },
+            {
+              "name": "emailAlertRecipients",
+              "value": "[parameters('emailRecipients')]"
+            },
+            {
+              "name": "cosmosDbConnectionString",
+              "value": "[concat('AccountEndpoint=', reference(concat('Microsoft.DocumentDb/databaseAccounts/', variables('cosmosAccountName'))).documentEndpoint, ';AccountKey=', listKeys(resourceId('Microsoft.DocumentDB/databaseAccounts', variables('cosmosAccountName')), '2015-11-06').primaryMasterKey)]"
+            },
+            {
+              "name": "EmailEnabled",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "resources": [
+        {
+          "apiVersion": "2016-08-01",
+          "type": "config",
+          "name": "web",
+          "dependsOn": [
+            "[resourceId('Microsoft.Web/sites', variables('functionAppName'))]"
+          ],
+          "properties": {
+            "use32BitWorkerProcess": false
+          }
+        }
+      ]
+    },
+    {
+      "apiVersion": "2014-04-01",
+      "name": "[variables('appInsightsName')]",
+      "type": "Microsoft.Insights/components",
+      "location": "North Europe",
+      "dependsOn": [],
+      "tags": {
+        "[concat('hidden-link:', resourceId('Microsoft.Web/sites', variables('functionAppName')))]": "Resource",
+        "DisplayName": "Production AI Monitoring"
+      },
+      "properties": {
+        "ApplicationId": "[variables('functionAppName')]"
+      }
+    },
+    {
+      "name": "[variables('eventHubNamespace')]",
+      "type": "Microsoft.EventHub/namespaces",
+      "apiVersion": "2015-08-01",
+      "location": "[resourceGroup().location]",
+      "properties":{
+      },
+      "sku": {
+        "name": "Standard",
+        "tier": "Standard",
+        "capacity": 1
+      },
+      "tags": {
+        "DisplayName":"Event Hub Namespace"
+      },
+      "resources": [
+        {
+          "type": "eventhubs",
+          "name": "[variables('eventHubName')]",
+          "location": "[resourceGroup().location]",
+          "apiVersion": "2015-08-01",
+          "dependsOn": [
+            "[resourceId('Microsoft.EventHub/namespaces', variables('eventHubNamespace'))]"
+          ],
+          "properties": {
+            "messageRetentionInDays": 7,
+            "partitionCount": 4,
+            "path": "[variables('eventHubName')]"
+          },
+          "resources": [
+            {
+              "type": "consumergroups",
+              "apiVersion": "2015-08-01",
+              "location": "[resourceGroup().location]",
+              "name": "[variables('sensorEventFuncConsumerGroup')]",
+              "properties": {
+                "eventHubPath": "[variables('eventHubName')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.EventHub/namespaces/eventhubs', variables('eventHubNamespace'), variables('eventHubName'))]"
+              ]
+            },
+            {
+              "type": "authorizationRules",
+              "name": "[variables('sensorEventFuncSASKeyName')]",
+              "apiVersion": "2015-08-01",
+              "location": "[resourceGroup().location]",
+              "properties": {
+                "rights": [
+                  "Listen"
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.EventHub/namespaces/eventhubs', variables('eventHubNamespace'), variables('eventHubName'))]"
+              ]
+            },
+            {
+              "type": "authorizationRules",
+              "name": "[variables('asaEventSendSASKey')]",
+              "apiVersion": "2015-08-01",
+              "location": "[resourceGroup().location]",
+              "properties": {
+                "rights": [
+                  "Send"
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.EventHub/namespaces/eventhubs', variables('eventHubNamespace'), variables('eventHubName'))]",
+                "[resourceId('Microsoft.EventHub/namespaces/eventhubs/authorizationRules', variables('eventHubNamespace'), variables('eventHubName'), variables('sensorEventFuncSASKeyName'))]"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "apiVersion": "2016-03-01",
+      "type": "Microsoft.StreamAnalytics/streamingJobs",
+      "name": "[variables('asaJobName')]",
+      "location": "[resourceGroup().location]",
+      "tags":{
+        "DisplayName": "Event Analysis Jobs"
+      },
+      "properties": {
+        "sku": {
+          "name": "Standard"
+        },
+        "outputErrorPolicy": "stop",
+        "outputStartMode": "JobStartTime",
+        "dataLocale": "en-GB",
+        "eventsOutOfOrderPolicy": "Adjust",
+        "eventsOutOfOrderMaxDelayInSeconds": 5,
+        "eventsLateArrivalMaxDelayInSeconds": 1,
+        "inputs": [
+          {
+            "name": "IotHubInput",
+            "properties": {
+              "type": "stream",
+              "serialization": {
+                "type": "JSON",
+                "properties": {
+                  "encoding": "UTF8"
+                }
+              },
+              "datasource": {
+                "type": "Microsoft.Devices/IotHubs",
+                "properties": {
+                  "iotHubNamespace": "[variables('iotHubName')]",
+                  "sharedAccessPolicyName": "[variables('IotHubAsaKeyName')]",
+                  "sharedAccessPolicyKey": "[listKeys(resourceId('Microsoft.Devices/IotHubs/Iothubkeys', variables('iotHubName'), variables('IotHubAsaKeyName')), '2016-02-03').primaryKey]",
+                  "endpoint": "messages/events",
+                  "consumerGroupName": "[variables('iotHubAsaRawOutputConsumerGroup')]"
+                }
+              }
+            }
+          }
+        ],
+        "transformation": {
+          "name": "[variables('asaJobName')]",
+          "properties": {
+            "streamingUnits": 1,
+            "query": "[variables('asaJobTransformQuery')]"
+          }
+        },
+        "outputs": [
+          {
+            "name": "BlobSink",
+            "properties": {
+              "serialization": {
+                "type": "CSV",
+                "properties": {
+                  "fieldDelimiter": ",",
+                  "encoding": "UTF8"
+                }
+              },
+              "datasource": {
+                "type": "Microsoft.Storage/Blob",
+                "properties": {
+                  "storageAccounts": [
+                    {
+                      "accountName": "[variables('archiveStorageName')]",
+                      "accountKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('archiveStorageName')), '2015-06-15').key1]"
+                    }
+                  ],
+                  "container": "[variables('rawDataContainerName')]",
+                  "pathPattern": "rawData/{date}",
+                  "dateFormat": "yyyy/MM/dd",
+                  "timeFormat": "HH"
+                }
+              }
+            }
+          },
+          {
+            "name": "EventHubOutput",
+            "properties": {
+              "serialization": {
+                "type": "JSON",
+                "properties": {
+                  "encoding": "UTF8",
+                  "format": "array"
+                }
+              },
+              "datasource": {
+                "type": "Microsoft.ServiceBus/EventHub",
+                "properties": {
+                  "eventHubName": "[variables('eventHubName')]",
+                  "serviceBusNamespace": "[variables('eventHubNamespace')]",
+                  "sharedAccessPolicyName": "[variables('asaEventSendSASKey')]",
+                  "sharedAccessPolicyKey": "[listKeys(resourceId('Microsoft.Eventhub/namespaces/eventhubs/authorizationRules', variables('eventHubNamespace'), variables('eventHubName'), variables('asaEventSendSASKey')), '2015-08-01').primaryKey]",
+                  "partitionKey": "deviceId"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Devices/IotHubs', variables('iotHubName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('archiveStorageName'))]",
+        "[resourceId('Microsoft.EventHub/namespaces', variables('eventHubNamespace'))]",
+        "[resourceId('Microsoft.EventHub/namespaces/eventhubs', variables('eventHubNamespace'), variables('eventHubName'))]",
+        "[resourceId('Microsoft.EventHub/namespaces/eventhubs/authorizationRules', variables('eventHubNamespace'), variables('eventHubName'), variables('asaEventSendSASKey'))]"
+      ]
+    },
+    {
+      "apiVersion": "2015-04-08",
+      "type": "Microsoft.DocumentDB/databaseAccounts",
+      "name": "[variables('cosmosAccountName')]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "DisplayName": "CosmosDB Event Storage"
+      },
+      "properties": {
+        "name": "[variables('cosmosAccountName')]",
+        "databaseAccountOfferType": "Standard",
+        "locations": [
+          {
+            "locationName": "[resourceGroup().location]",
+            "failoverPriority": 0
+          },
+          {
+            "locationName": "North Europe",
+            "failoverPriority": 1
+          }
+        ]
+      }
+    }
+  ],
+  "outputs": {
+    "functionAppName": {
+      "value": "[variables('functionAppName')]",
+      "type": "string"
+    }
+  }
+}
