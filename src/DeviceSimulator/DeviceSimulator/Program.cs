@@ -23,25 +23,41 @@ namespace DeviceSimulator
             Console.CancelKeyPress += HandleConsoleCancelEventHandler;
             bool ok = false;
             int numDevices = 0;
+            bool removeExisting = true;
             while (!ok)
             {
                 Console.WriteLine("How many devices do you want to simulate?");
                 var response = Console.ReadLine();
                 ok = int.TryParse(response, out numDevices);
                 if (!ok)
+                {
                     Console.WriteLine("That's not a whole number. Give it another go.");
+                    continue;
+                }
+                Console.WriteLine("Remove existing devices? Y/n");
+                response = Console.ReadLine().ToLower();
+                ok = false;
+                if (string.IsNullOrWhiteSpace(response) || response == "y")
+                    ok = true;
+                else if (response == "n")
+                {
+                    removeExisting = false;
+                    ok = true;
+                }
+                else
+                    ok = false;
                     
             }
-            await RunAsync(numDevices);
+            await RunAsync(numDevices, removeExisting);
         }
 
-        private static async Task RunAsync(int numDevices)
+        private static async Task RunAsync(int numDevices, bool removeExisting)
         {
-            await ConfigureAsync(numDevices);
+            await ConfigureAsync(numDevices, removeExisting);
             await Task.WhenAll(devices.Select(x => x.StartAsync()));
         }
 
-        private static async Task ConfigureAsync(int numDevices)
+        private static async Task ConfigureAsync(int numDevices, bool removeExisting)
         {
             var builder = new ConfigurationBuilder().SetBasePath(Directory.GetCurrentDirectory()).AddJsonFile("appsettings.json");
 
@@ -53,7 +69,7 @@ namespace DeviceSimulator
                     new StringContent(JsonConvert.SerializeObject(new
                     {
                         NumDevices = numDevices,
-                        ClearBeforeCreate = true
+                        ClearBeforeCreate = removeExisting
                     }), Encoding.UTF8, "application/json"));
                 response.EnsureSuccessStatusCode();
 

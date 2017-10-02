@@ -89,7 +89,7 @@ namespace DeviceSimulator
                 {
                     await Task.Delay(1000, token);
                     if (status == Running)
-                        PerformTemperatureChange(random.NextDouble(0.25, 0.6));
+                        PerformTemperatureChange(random.NextDouble(0.3, 0.5));
                     else
                         PerformTemperatureChange(-1 * random.NextDouble(0.25, 0.6));
                 }

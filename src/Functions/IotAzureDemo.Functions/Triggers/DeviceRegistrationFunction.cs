@@ -50,18 +50,39 @@ namespace IotAzureDemo.Functions.Triggers
             await Task.WhenAll(devices.Select(async device =>
             {
                 Device d = null;
-                try
-                {
-                    d = await register.AddDeviceAsync(device);
-                }
-                catch (DeviceAlreadyExistsException)
-                {
-                    d = await register.GetDeviceAsync(device.Id);
-                }
+                d = await CreateDevice(device);
                 result.Add(new { Id = d.Id, Key = d.Authentication.SymmetricKey.PrimaryKey });
             }));
 
             return result.ToList(); ;
+        }
+
+        private static async Task<Device> CreateDevice(Device device, bool retry = true)
+        {
+            Device d;
+            try
+            {
+                d = await register.AddDeviceAsync(device);
+            }
+            catch (DeviceAlreadyExistsException)
+            {
+
+                if (retry)
+                {
+                    device = new Device(DeviceIdGenerator.GetRandomName(1));
+                    try
+                    {
+                        d = await CreateDevice(device, false);
+                    }
+                    catch (DeviceAlreadyExistsException)
+                    {
+                        d = await register.GetDeviceAsync(device.Id);
+                    }
+                }
+                throw;
+            }
+
+            return d;
         }
 
         private static async Task ClearExistingDevices()
