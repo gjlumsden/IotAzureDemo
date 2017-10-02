@@ -79,7 +79,10 @@ namespace IotAzureDemo.Functions.Triggers
                         d = await register.GetDeviceAsync(device.Id);
                     }
                 }
-                throw;
+                else
+                {
+                    throw;
+                }
             }
 
             return d;
