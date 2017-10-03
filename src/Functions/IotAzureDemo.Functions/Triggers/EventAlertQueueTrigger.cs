@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using SendGrid.Helpers.Mail;
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace IotAzureDemo.Functions.Triggers
 {
@@ -14,8 +15,8 @@ namespace IotAzureDemo.Functions.Triggers
         private static string alertSenderAddress = Environment.GetEnvironmentVariable(nameof(alertSenderAddress));
 
         [FunctionName("EventAlertFunction")]
-        public static void Run([QueueTrigger("%alertsQueueName%", Connection ="alertStorageQueueConnection")]string message, 
-            [SendGrid(ApiKey = "sendgridKey")]ICollector<Mail> mail, ILogger log, ExecutionContext context)
+        public static async Task Run([QueueTrigger("%alertsQueueName%", Connection ="alertStorageQueueConnection")]string message, 
+            [SendGrid(ApiKey = "sendgridKey")]IAsyncCollector<Mail> mail, ILogger log)
         {
             try
             {
@@ -34,7 +35,7 @@ namespace IotAzureDemo.Functions.Triggers
                                 new Content("text/plain", GetMaintenanceEventEmailContent(maintenanceEvent))));
                     foreach (var e in emails)
                     {
-                        mail.Add(e);
+                        await mail.AddAsync(e);
                     }
                 }
                 else
@@ -47,7 +48,7 @@ namespace IotAzureDemo.Functions.Triggers
                                 new Content("text/plain", GetThresholdEventEmailContent(thresholdEvent))));
                     foreach (var e in emails)
                     {
-                        mail.Add(e);
+                        await mail.AddAsync(e);
                     }
                 }
             }

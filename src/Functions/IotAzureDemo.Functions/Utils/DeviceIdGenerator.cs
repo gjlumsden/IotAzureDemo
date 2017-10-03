@@ -7,7 +7,7 @@ namespace IotAzureDemo.Functions.Utils
     /// https://github.com/moby/moby/blob/master/pkg/namesgenerator/names-generator.go
     /// https://github.com/moby/moby/blob/master/LICENSE
     /// </summary>
-    class DeviceIdGenerator
+    public class DeviceIdGenerator
     {
         private static Random random = new Random();
         private static string[] left = new string[]
@@ -597,7 +597,7 @@ namespace IotAzureDemo.Functions.Utils
         // GetRandomName generates a random name from the list of adjectives and surnames in this package
         // formatted as "adjective_surname". For example 'focused_turing'. If retry is non-zero, a random
         // integer between 0 and 10 will be added to the end of the name, e.g `focused_turing3`
-        internal static string GetRandomName(int retry)
+        public static string GetRandomName(int retry)
         {
             var name = $"{left[random.Next(0, left.Length - 1)]}_{right[random.Next(0, right.Length - 1)]}";
 
