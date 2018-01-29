@@ -11,7 +11,7 @@
     <PackageReference Include="Microsoft.NET.Sdk.Functions" Version="1.0.7" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\IotAzureDemo.NetStandard.Model\IotAzureDemo.NetStandard.Model.csproj" />
+    <ProjectReference Include="..\IotAzureDemo.Model\IotAzureDemo.Model.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Update="host.json">
