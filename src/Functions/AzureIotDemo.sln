@@ -3,9 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.27130.2026
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IotAzureDemo.NetStandard.Functions", "IotAzureDemo.NetStandard.Functions\IotAzureDemo.NetStandard.Functions.csproj", "{4F0A8F76-B206-46F2-8F79-5A911DC50122}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IotAzureDemo.Functions", "IotAzureDemo.Functions\IotAzureDemo.Functions.csproj", "{4F0A8F76-B206-46F2-8F79-5A911DC50122}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IotAzureDemo.NetStandard.Model", "IotAzureDemo.NetStandard.Model\IotAzureDemo.NetStandard.Model.csproj", "{7C473403-D74D-4AB8-9873-AC81082EACBF}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "IotAzureDemo.Model", "IotAzureDemo.Model\IotAzureDemo.Model.csproj", "{7C473403-D74D-4AB8-9873-AC81082EACBF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
