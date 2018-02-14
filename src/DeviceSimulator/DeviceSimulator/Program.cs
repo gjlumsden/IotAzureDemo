@@ -12,7 +12,8 @@ namespace DeviceSimulator
 {
     class Program
     {
-        private const string DeviceConnectionStringFormat = "HostName=iotDemo-IoT-Hub-swp6bnbmfkcou.azure-devices.net;DeviceId={0};SharedAccessKey={1}";
+        //Replace with your host name.
+        private const string DeviceConnectionStringFormat = "HostName=gaugiot-IoT-Hub-6oxplcjs5a3ta.azure-devices.net;DeviceId={0};SharedAccessKey={1}";
 
         private static IList<SimulatedDevice> devices;
         private static IConfiguration Configuration { get; set; }
