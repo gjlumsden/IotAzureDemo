@@ -285,6 +285,10 @@
               "value": "[concat('HostName=',variables('iotHubName'),'.azure-devices.net;SharedAccessKeyName=',variables('IotHubFunctionServiceConnectKeyName'),';SharedAccessKey=',listKeys(resourceId('Microsoft.Devices/IotHubs/Iothubkeys', variables('iotHubName'), variables('IotHubFunctionServiceConnectKeyName')), '2016-02-03').primaryKey)]"
             },
             {
+              "name": "iotHubName",
+              "value":"[variables('iotHubName')]"
+            },
+            {
               "name": "AzureWebJobsSecretStorageType",
               "value": "Blob"
             },

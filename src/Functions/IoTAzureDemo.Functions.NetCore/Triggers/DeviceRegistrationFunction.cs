@@ -33,7 +33,11 @@ namespace IotAzureDemo.Functions.Triggers
 
                 var result = await GenerateDevices((int)request.NumDevices);
 
-                return req.CreateResponse(HttpStatusCode.OK, result);
+                return req.CreateResponse(HttpStatusCode.OK, new
+                {
+                    IoTHubName= Environment.GetEnvironmentVariable("iotHubName"),
+                    Devices = result
+                });
             }
             catch (Exception ex)
             {

@@ -7,13 +7,13 @@ using Microsoft.Extensions.Configuration;
 using System.Net.Http;
 using Newtonsoft.Json;
 using System.Text;
+using Newtonsoft.Json.Linq;
 
 namespace DeviceSimulator
 {
     class Program
     {
-        //Replace with your host name.
-        private const string DeviceConnectionStringFormat = "HostName=gaugiot-IoT-Hub-6oxplcjs5a3ta.azure-devices.net;DeviceId={0};SharedAccessKey={1}";
+        private const string DeviceConnectionStringFormat = "HostName={0}.azure-devices.net;DeviceId={1};SharedAccessKey={2}";
 
         private static IList<SimulatedDevice> devices;
         private static IConfiguration Configuration { get; set; }
@@ -74,12 +74,12 @@ namespace DeviceSimulator
                     }), Encoding.UTF8, "application/json"));
                 response.EnsureSuccessStatusCode();
 
-                var createdDevices = JsonConvert.DeserializeObject<dynamic[]>(await response.Content.ReadAsStringAsync());
+                var createdDevices = JsonConvert.DeserializeObject<dynamic>(await response.Content.ReadAsStringAsync());
 
-                devices = createdDevices.Select(x => new SimulatedDevice()
+                devices = ((JArray)createdDevices.Devices).Select(x => new SimulatedDevice()
                     {
-                        ConnectionString = string.Format(DeviceConnectionStringFormat, x.Id, x.Key),
-                        DisplayName = x.Id,
+                        ConnectionString = string.Format(DeviceConnectionStringFormat, createdDevices.IoTHubName, x["Id"], x["Key"]),
+                        DisplayName = x["Id"].ToString(),
                         Enabled = true
                     }).ToList();
 
