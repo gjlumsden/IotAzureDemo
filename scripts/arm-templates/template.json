@@ -337,7 +337,7 @@
       "apiVersion": "2014-04-01",
       "name": "[variables('appInsightsName')]",
       "type": "Microsoft.Insights/components",
-      "location": "North Europe",
+      "location": "[resourceGroup().location]",
       "dependsOn": [],
       "tags": {
         "[concat('hidden-link:', resourceId('Microsoft.Web/sites', variables('functionAppName')))]": "Resource",
