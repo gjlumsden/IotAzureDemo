@@ -550,10 +550,6 @@
           {
             "locationName": "[resourceGroup().location]",
             "failoverPriority": 0
-          },
-          {
-            "locationName": "North Europe",
-            "failoverPriority": 1
           }
         ]
       }
