@@ -256,3 +256,4 @@ appsettings.json
 local.settings.json
 # .Net Core App Settings
 Program.Settings.cs
+.vscode/settings.json
